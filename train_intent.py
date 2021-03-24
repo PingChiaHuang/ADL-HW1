@@ -5,10 +5,13 @@ from pathlib import Path
 from typing import Dict
 
 import torch
+from torch.utils.data import DataLoader
+from torch.optim import AdamW
 from tqdm import trange
 
 from dataset import SeqClsDataset
 from utils import Vocab
+from model import SeqClassifier
 
 TRAIN = "train"
 DEV = "eval"
@@ -29,13 +32,30 @@ def main(args):
         for split, split_data in data.items()
     }
     # TODO: crecate DataLoader for train / dev datasets
+    dataloaders = {
+        split: DataLoader(
+            split_dataset,
+            batch_size=args.batch_size,
+            shuffle=(split == TRAIN),
+            num_workers=args.num_workers,
+            collate_fn=split_dataset.collate_fn,
+        )
+        for split, split_dataset in datasets.items()
+    }
 
     embeddings = torch.load(args.cache_dir / "embeddings.pt")
     # TODO: init model and move model to target device(cpu / gpu)
-    model = None
+    model = SeqClassifier(
+        embeddings,
+        args.hidden_size,
+        args.num_layers,
+        args.dropout,
+        args.bidirectional,
+        datasets[TRAIN].num_classes,
+    )
 
     # TODO: init optimizer
-    optimizer = None
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     epoch_pbar = trange(args.num_epoch, desc="Epoch")
     for epoch in epoch_pbar:
@@ -78,9 +98,11 @@ def parse_args() -> Namespace:
 
     # optimizer
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--weight_decay", type=float, default=1e-4)
 
     # data loader
     parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--num_workers", type=int, default=8)
 
     # training
     parser.add_argument(
