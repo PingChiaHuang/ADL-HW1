@@ -1,5 +1,5 @@
 from typing import List, Dict
-
+import torch
 from torch.utils.data import Dataset
 
 from utils import Vocab
@@ -32,6 +32,10 @@ class SeqClsDataset(Dataset):
 
     def collate_fn(self, samples: List[Dict]) -> Dict:
         # TODO: implement collate_fn
+        batched_samples = {
+            key: torch.stack([sample[key] for sample in samples]) for key in samples[0]
+        }
+        return batched_samples
         raise NotImplementedError
 
     def label2idx(self, label: str):
