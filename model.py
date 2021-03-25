@@ -47,10 +47,10 @@ class SeqClassifier(torch.nn.Module):
     def forward(self, batch) -> Dict[str, torch.Tensor]:
         # TODO: implement model forward
         embedded = self.embed(batch)
-        encoded, _ = self.gru(self.layernorm(embedded))
+        encoded, _ = self.gru(embedded)
         encoded = self.dropout(encoded)
         # last_encoded = torch.cat([encoded[:, -1, :self.hidden_size], encoded[:, 0, self.hidden_size:]], dim=-1)
-        last_encoded = encoded[:, -1]
+        last_encoded = self.batchnorm(encoded[:, -1])
         logits = self.fc(last_encoded)
         return logits
         raise NotImplementedError

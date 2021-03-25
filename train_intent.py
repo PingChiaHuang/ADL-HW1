@@ -142,11 +142,11 @@ def main(args):
             )
 
             if split == DEV:
-                if best_loss < result["loss"]:
+                if best_loss > result["loss"]:
                     best_loss = result["loss"]
                     torch.save(
                         model.state_dict(),
-                        args.ckpt_dir / f"{epoch:03d}-{result['loss']:.4f}-{result['acc']:.4f}",
+                        args.ckpt_dir / f"{epoch:03d}-{result['loss']:.4f}-{result['acc']:.4f}.pt",
                     )
 
     # TODO: Inference on test set
@@ -177,14 +177,14 @@ def parse_args() -> Namespace:
     parser.add_argument("--max_len", type=int, default=128)
 
     # model
-    parser.add_argument("--hidden_size", type=int, default=128)
+    parser.add_argument("--hidden_size", type=int, default=256)
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)
 
     # optimizer
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--weight_decay", type=float, default=1e-1)
+    parser.add_argument("--weight_decay", type=float, default=1e-2)
 
     # data loader
     parser.add_argument("--batch_size", type=int, default=128)
