@@ -3,7 +3,7 @@ import pickle
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Dict, Callable, List
-from collection import DefaultDict
+from collections import defaultdict
 import pandas as pd
 
 import torch
@@ -19,15 +19,14 @@ def predict(
 ) -> List[Dict]:
 
     model.eval()
-    prediction = DefaultDict(list)
+    prediction = defaultdict(list)
     with torch.no_grad():
         for inputs in dataloader:
+            prediction["id"] += inputs["id"]
             outputs = model(inputs["text_ids"].to(device))
-            outputs = outputs.sqeeze()
-            outputs = torch.argmax(outputs)
+            outputs = torch.argmax(outputs, dim=-1)
             outputs = outputs.int().tolist()
             prediction["intent"] += [idx2label(idx) for idx in outputs]
-            prediction["id"] += inputs["id"]
     return prediction
 
 
@@ -39,7 +38,7 @@ def main(args):
     intent2idx: Dict[str, int] = json.loads(intent_idx_path.read_text())
 
     data = json.loads(args.test_file.read_text())
-    dataset = SeqClsDataset(data, vocab, intent2idx, args.max_len)
+    dataset = SeqClsDataset(data, vocab, intent2idx, args.max_len, is_train=False)
     # TODO: crecate DataLoader for test dataset
     dataloader = DataLoader(
         dataset,
@@ -88,9 +87,9 @@ def parse_args() -> Namespace:
     parser.add_argument("--max_len", type=int, default=128)
 
     # model
-    parser.add_argument("--hidden_size", type=int, default=512)
+    parser.add_argument("--hidden_size", type=int, default=256)
     parser.add_argument("--num_layers", type=int, default=2)
-    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)
 
     # data loader
