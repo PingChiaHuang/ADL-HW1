@@ -2,7 +2,9 @@ import json
 import pickle
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Callable, List
+from collection import DefaultDict
+import pandas as pd
 
 import torch
 from torch.utils.data import DataLoader
@@ -10,6 +12,23 @@ from torch.utils.data import DataLoader
 from dataset import SeqClsDataset
 from model import SeqClassifier
 from utils import Vocab
+
+
+def predict(
+    model: torch.nn.Module, dataloader: DataLoader, device: torch.device, idx2label: Callable
+) -> List[Dict]:
+
+    model.eval()
+    prediction = DefaultDict(list)
+    with torch.no_grad():
+        for inputs in dataloader:
+            outputs = model(inputs["text_ids"].to(device))
+            outputs = outputs.sqeeze()
+            outputs = torch.argmax(outputs)
+            outputs = outputs.int().tolist()
+            prediction["intent"] += [idx2label(idx) for idx in outputs]
+            prediction["id"] += inputs["id"]
+    return prediction
 
 
 def main(args):
@@ -23,12 +42,12 @@ def main(args):
     dataset = SeqClsDataset(data, vocab, intent2idx, args.max_len)
     # TODO: crecate DataLoader for test dataset
     dataloader = DataLoader(
-            dataset,
-            batch_size=args.batch_size,
-            shuffle=False,
-            num_workers=args.num_workers,
-            collate_fn=dataset.collate_fn,
-        )
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        collate_fn=dataset.collate_fn,
+    )
 
     embeddings = torch.load(args.cache_dir / "embeddings.pt")
 
@@ -44,32 +63,25 @@ def main(args):
 
     ckpt = torch.load(args.ckpt_path)
     # load weights into model
-
+    model.load_state_dict(ckpt)
+    model.to(args.device)
     # TODO: predict dataset
-    prediction = 
+    prediction = predict(model, dataloader, args.device, dataset.idx2label)
     # TODO: write prediction to file (args.pred_file)
+    df = pd.DataFrame.from_dict(prediction)
+    df.to_csv(args.pred_file, index=False)
 
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument(
-        "--test_file",
-        type=Path,
-        help="Path to the test file.",
-        required=True
-    )
+    parser.add_argument("--test_file", type=Path, help="Path to the test file.", required=True)
     parser.add_argument(
         "--cache_dir",
         type=Path,
         help="Directory to the preprocessed caches.",
         default="./cache/intent/",
     )
-    parser.add_argument(
-        "--ckpt_path",
-        type=Path,
-        help="Path to model checkpoint.",
-        required=True
-    )
+    parser.add_argument("--ckpt_path", type=Path, help="Path to model checkpoint.", required=True)
     parser.add_argument("--pred_file", type=Path, default="pred.intent.csv")
 
     # data
