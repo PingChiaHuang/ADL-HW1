@@ -23,6 +23,7 @@ class SeqClassifier(torch.nn.Module):
             embedding_size,
             hidden_size,
             num_layers=num_layers,
+            dropout=dropout,
             bidirectional=bidirectional,
             batch_first=True,
         )
