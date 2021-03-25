@@ -19,6 +19,20 @@ DEV = "eval"
 SPLITS = [TRAIN, DEV]
 
 
+def init_weights(self):
+    for m in self.modules():
+        if type(m) in [torch.nn.GRU, torch.nn.LSTM, torch.nn.RNN]:
+            for name, param in m.named_parameters():
+                if "weight_ih" in name:
+                    for ih in param.chunk(3, 0):
+                        torch.nn.init.xavier_uniform_(ih)
+                elif "weight_hh" in name:
+                    for hh in param.chunk(3, 0):
+                        torch.nn.init.orthogonal_(hh)
+                # elif "bias" in name:
+                #     param.data.fill_(0)
+
+
 def run_one_epoch(
     model: torch.nn.Module,
     dataloader: DataLoader,
@@ -102,6 +116,7 @@ def main(args):
         args.bidirectional,
         datasets[TRAIN].num_classes,
     )
+    model.apply(init_weights)
     # TODO: init optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     schedular = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
@@ -162,14 +177,14 @@ def parse_args() -> Namespace:
     parser.add_argument("--max_len", type=int, default=128)
 
     # model
-    parser.add_argument("--hidden_size", type=int, default=256)
+    parser.add_argument("--hidden_size", type=int, default=128)
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)
 
     # optimizer
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--weight_decay", type=float, default=1e-2)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-1)
 
     # data loader
     parser.add_argument("--batch_size", type=int, default=128)
