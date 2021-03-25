@@ -32,9 +32,14 @@ class SeqClsDataset(Dataset):
 
     def collate_fn(self, samples: List[Dict]) -> Dict:
         # TODO: implement collate_fn
-        batched_samples = {
-            key: torch.stack([sample[key] for sample in samples]) for key in samples[0]
-        }
+        batched_samples = {key: [sample[key] for sample in samples] for key in samples[0]}
+        batched_samples["text"] = ['[BOS] ' + text + ' [EOS]' for text in batched_samples["text"]]
+        batched_samples["text_ids"] = torch.LongTensor(
+            self.vocab.encode_batch(batched_samples["text"])
+        )
+        batched_samples["intent_ids"] = torch.LongTensor(
+            [self.label2idx(label) for label in batched_samples["intent"]]
+        )
         return batched_samples
         raise NotImplementedError
 
