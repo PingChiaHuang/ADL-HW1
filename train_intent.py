@@ -3,11 +3,12 @@ import pickle
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Dict
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
-from torch.optim import AdamW
-from tqdm import trange
+from torch.optim import AdamW, Adam, lr_scheduler
+from torch.nn import CrossEntropyLoss
 
 from dataset import SeqClsDataset
 from utils import Vocab
@@ -16,6 +17,54 @@ from model import SeqClassifier
 TRAIN = "train"
 DEV = "eval"
 SPLITS = [TRAIN, DEV]
+
+
+def run_one_epoch(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    optimizer: torch.optim,
+    lr_scheduler: torch.optim.lr_scheduler,
+    mode: str,
+    total_len: int,
+    batch_size: int,
+) -> Dict:
+
+    is_train = mode == TRAIN
+    model.train() if is_train else model.eval()
+
+    num_batch = int(np.ceil(total_len / batch_size))
+    criterion = CrossEntropyLoss()
+    total_loss = 0
+    total_correct = 0
+    for i, inputs in enumerate(dataloader, 1):
+        with torch.set_grad_enabled(is_train):
+            outputs = model(inputs["text_ids"].to(device))
+            labels = inputs["intent_ids"].to(device)
+            optimizer.zero_grad()
+            loss = criterion(outputs, labels)
+
+            if is_train:
+                loss.backward()
+                optimizer.step()
+
+            loss = loss.item()
+            correct = (torch.argmax(outputs, dim=-1) == labels).float()
+            print(
+                f"{i:03d}/{num_batch} [{mode.center(5)}] Loss: {loss:.4f} ACC: {correct.mean().item():.4f}",
+                end="\r",
+            )
+
+            total_loss += loss * labels.size(0)
+            total_correct += correct.sum().item()
+
+    if not is_train:
+        lr_scheduler.step(total_loss)
+
+    result = {}
+    result["loss"] = total_loss / total_len
+    result["acc"] = total_correct / total_len
+    return result
 
 
 def main(args):
@@ -53,15 +102,37 @@ def main(args):
         args.bidirectional,
         datasets[TRAIN].num_classes,
     )
-
     # TODO: init optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-
-    epoch_pbar = trange(args.num_epoch, desc="Epoch")
-    for epoch in epoch_pbar:
+    schedular = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
+    # epoch_pbar = trange(args.num_epoch, desc="Epoch")
+    model.to(args.device)
+    best_loss = np.inf
+    for epoch in range(1, args.num_epoch + 1):
         # TODO: Training loop - iterate over train dataloader and update model weights
         # TODO: Evaluation loop - calculate accuracy and save model weights
-        pass
+        for split in [TRAIN, DEV]:
+            result = run_one_epoch(
+                model,
+                dataloaders[split],
+                device=args.device,
+                optimizer=optimizer,
+                lr_scheduler=schedular,
+                mode=split,
+                total_len=len(datasets[split]),
+                batch_size=args.batch_size,
+            )
+            print(
+                f"{epoch:03d}/{args.num_epoch} [{split.center(5)}] Loss: {result['loss']:.4f} Acc: {result['acc']:.4f}"
+            )
+
+            if split == DEV:
+                if best_loss < result["loss"]:
+                    best_loss = result["loss"]
+                    torch.save(
+                        model.state_dict(),
+                        args.ckpt_dir / f"{epoch:03d}-{result['loss']:.4f}-{result['acc']:.4f}",
+                    )
 
     # TODO: Inference on test set
 
@@ -91,14 +162,14 @@ def parse_args() -> Namespace:
     parser.add_argument("--max_len", type=int, default=128)
 
     # model
-    parser.add_argument("--hidden_size", type=int, default=512)
+    parser.add_argument("--hidden_size", type=int, default=256)
     parser.add_argument("--num_layers", type=int, default=2)
-    parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)
 
     # optimizer
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--weight_decay", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-2)
 
     # data loader
     parser.add_argument("--batch_size", type=int, default=128)
