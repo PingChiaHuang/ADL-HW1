@@ -13,6 +13,7 @@ class SeqClassifier(torch.nn.Module):
         dropout: float,
         bidirectional: bool,
         num_class: int,
+        seq_wise: bool = True,
     ) -> None:
         super(SeqClassifier, self).__init__()
         self.embed = Embedding.from_pretrained(embeddings, freeze=False)
@@ -36,6 +37,7 @@ class SeqClassifier(torch.nn.Module):
 
         self.hidden_size = hidden_size
         self.bidirectional = bidirectional
+        self.seq_wise = seq_wise
 
     @property
     def encoder_output_size(self) -> int:
@@ -50,7 +52,11 @@ class SeqClassifier(torch.nn.Module):
         encoded, _ = self.gru(embedded)
         encoded = self.dropout(encoded)
         # last_encoded = torch.cat([encoded[:, -1, :self.hidden_size], encoded[:, 0, self.hidden_size:]], dim=-1)
-        last_encoded = self.batchnorm(encoded[:, -1])
-        logits = self.fc(last_encoded)
-        return logits
+        if self.seq_wise:
+            last_encoded = self.batchnorm(encoded[:, -1])
+            logits = self.fc(last_encoded)
+            return logits
+        else:
+            logits = self.fc(encoded)
+            return logits
         raise NotImplementedError

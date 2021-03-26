@@ -17,7 +17,7 @@ class SeqClsDataset(Dataset):
         self.data = data
         self.vocab = vocab
         self.label_mapping = label_mapping
-        self._idx2label = {idx: intent for intent, idx in self.label_mapping.items()}
+        self._idx2label = {idx: label for label, idx in self.label_mapping.items()}
         self.max_len = max_len
         self.is_train = is_train
 
@@ -32,7 +32,7 @@ class SeqClsDataset(Dataset):
     def num_classes(self) -> int:
         return len(self.label_mapping)
 
-    def collate_fn(self, samples: List[Dict]) -> Dict:
+    def collate_fn_intent(self, samples: List[Dict]) -> Dict:
         # TODO: implement collate_fn
         batched_samples = {key: [sample[key] for sample in samples] for key in samples[0]}
         batched_samples["text"] = [
@@ -47,6 +47,22 @@ class SeqClsDataset(Dataset):
             )
         return batched_samples
         raise NotImplementedError
+
+    def collate_fn_slot(self, samples: List[Dict]) -> Dict:
+        batched_samples = {key: [sample[key] for sample in samples] for key in samples[0]}
+        batched_samples["tokens"] = [
+            ["[BOS]", *tokens, "[EOS]"] for tokens in batched_samples["tokens"]
+        ]
+        batched_samples["tokens_ids"] = torch.LongTensor(
+            self.vocab.encode_batch(batched_samples["tokens"])
+        )
+        if self.is_train:
+            batched_samples["tags_ids"] = torch.full_like(batched_samples["tokens_ids"], -100)
+            for i, tags in enumerate(batched_samples["tags"]):
+                batched_samples["tags_ids"][i, 1 : 1 + len(tags)] = torch.LongTensor(
+                    [self.label2idx(label) for label in tags]
+                )
+        return batched_samples
 
     def label2idx(self, label: str):
         return self.label_mapping[label]
