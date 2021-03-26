@@ -101,7 +101,7 @@ def main(args):
             batch_size=args.batch_size,
             shuffle=(split == TRAIN),
             num_workers=args.num_workers,
-            collate_fn=split_dataset.collate_fn,
+            collate_fn=split_dataset.collate_fn_intent,
         )
         for split, split_dataset in datasets.items()
     }

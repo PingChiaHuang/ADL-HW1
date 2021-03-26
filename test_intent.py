@@ -45,7 +45,7 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        collate_fn=dataset.collate_fn,
+        collate_fn=dataset.collate_fn_intent,
     )
 
     embeddings = torch.load(args.cache_dir / "embeddings.pt")
