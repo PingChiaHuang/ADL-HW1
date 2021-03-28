@@ -26,10 +26,18 @@ def predict(
             outputs = model(inputs["tokens_ids"].to(device))
             outputs = outputs.argmax(dim=-1)
             outputs = outputs.int().tolist()
-            prediction["tags"] += [
+            result = [
                 [idx2label(idx) for idx in ids[1 : len(inputs["tokens"][i]) - 1]]
                 for i, ids in enumerate(outputs)
             ]
+            # result = [
+            #     [
+            #         label if i == 0 or label != labels[i - 1] else label.replace("B", "I")
+            #         for i, label in enumerate(labels)
+            #     ]
+            #     for labels in result
+            # ]
+            prediction["tags"] += result
     return prediction
 
 
@@ -95,7 +103,7 @@ def parse_args() -> Namespace:
     parser.add_argument("--max_len", type=int, default=128)
 
     # model
-    parser.add_argument("--hidden_size", type=int, default=256)
+    parser.add_argument("--hidden_size", type=int, default=512)
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)

@@ -57,6 +57,9 @@ class SeqClsDataset(Dataset):
             self.vocab.encode_batch(batched_samples["tokens"])
         )
         if self.is_train:
+            # batched_samples["tags"] = [
+            #     [tag.replace("I", "B") for tag in tags] for tags in batched_samples["tags"]
+            # ]
             batched_samples["tags_ids"] = torch.full_like(batched_samples["tokens_ids"], -100)
             for i, tags in enumerate(batched_samples["tags"]):
                 batched_samples["tags_ids"][i, 1 : 1 + len(tags)] = torch.LongTensor(

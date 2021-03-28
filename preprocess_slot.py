@@ -27,6 +27,7 @@ def main(args):
         tags.update({tag for instance in dataset for tag in instance["tags"]})
         words.update([token for instance in dataset for token in instance["tokens"]])
 
+    # tags = {tag for tag in tags if "I" not in tag}
     tag2idx = {tag: i for i, tag in enumerate(tags)}
     tag_idx_path = args.output_dir / "tag2idx.json"
     tag_idx_path.write_text(json.dumps(tag2idx, indent=2))
