@@ -13,13 +13,23 @@ class SeqClsDataset(Dataset):
         label_mapping: Dict[str, int],
         max_len: int,
         is_train: bool = True,
+        add_labels: bool = True,
+        ignore: bool = False,
+        replace: bool = False,
     ):
         self.data = data
         self.vocab = vocab
+        if add_labels:
+            label_mapping[vocab.PAD] = len(label_mapping)
+            label_mapping[vocab.BOS] = len(label_mapping) + 1
+            label_mapping[vocab.EOS] = len(label_mapping) + 2
         self.label_mapping = label_mapping
         self._idx2label = {idx: label for label, idx in self.label_mapping.items()}
         self.max_len = max_len
         self.is_train = is_train
+        self.add_labels = add_labels
+        self.ignore = ignore
+        self.replace = replace
 
     def __len__(self) -> int:
         return len(self.data)
@@ -57,14 +67,29 @@ class SeqClsDataset(Dataset):
             self.vocab.encode_batch(batched_samples["tokens"])
         )
         if self.is_train:
-            # batched_samples["tags"] = [
-            #     [tag.replace("I", "B") for tag in tags] for tags in batched_samples["tags"]
-            # ]
-            batched_samples["tags_ids"] = torch.full_like(batched_samples["tokens_ids"], -100)
+            if self.replace:
+                batched_samples["tags"] = [
+                    [tag.replace("I", "B") for tag in tags] for tags in batched_samples["tags"]
+                ]
+            batched_samples["tags_ids"] = torch.full_like(
+                batched_samples["tokens_ids"],
+                self.label2idx("[PAD]")
+                if self.add_labels
+                else -100
+                if self.ignore
+                else self.label2idx("O"),
+            )
             for i, tags in enumerate(batched_samples["tags"]):
                 batched_samples["tags_ids"][i, 1 : 1 + len(tags)] = torch.LongTensor(
                     [self.label2idx(label) for label in tags]
                 )
+                if self.add_labels:
+                    batched_samples["tags_ids"][i, 1 + len(tags)] = self.label2idx("[EOS]")
+            if self.add_labels:
+                batched_samples["tags_ids"][:, 0] = self.label2idx("[BOS]")
+            # print(batched_samples["tags"][:10])
+            # print(batched_samples["tags_ids"][:10])
+            # exit()
         return batched_samples
 
     def label2idx(self, label: str):

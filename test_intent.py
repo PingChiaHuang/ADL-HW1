@@ -4,7 +4,6 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Dict, Callable, List
 from collections import defaultdict
-import pandas as pd
 
 import torch
 from torch.utils.data import DataLoader
@@ -67,8 +66,10 @@ def main(args):
     # TODO: predict dataset
     prediction = predict(model, dataloader, args.device, dataset.idx2label)
     # TODO: write prediction to file (args.pred_file)
-    df = pd.DataFrame.from_dict(prediction)
-    df.to_csv(args.pred_file, index=False)
+    with open(args.pred_file, 'w') as f:
+        print('id,intent', file=f)
+        for ids, intents in zip(prediction['id'], prediction['intent']):
+            print(f'{ids},{intents}', file=f)
 
 
 def parse_args() -> Namespace:

@@ -20,6 +20,7 @@ SPLITS = [TRAIN, DEV]
 
 
 def init_weights(self):
+    print("init weights")
     for m in self.modules():
         if type(m) in [torch.nn.GRU, torch.nn.LSTM, torch.nn.RNN]:
             for name, param in m.named_parameters():
@@ -92,7 +93,15 @@ def main(args):
     data_paths = {split: args.data_dir / f"{split}.json" for split in SPLITS}
     data = {split: json.loads(path.read_text()) for split, path in data_paths.items()}
     datasets: Dict[str, SeqClsDataset] = {
-        split: SeqClsDataset(split_data, vocab, tag2idx, args.max_len)
+        split: SeqClsDataset(
+            split_data,
+            vocab,
+            tag2idx,
+            args.max_len,
+            add_labels=args.add_labels,
+            ignore=args.ignore,
+            replace=args.replace,
+        )
         for split, split_data in data.items()
     }
     # TODO: crecate DataLoader for train / dev datasets
@@ -115,10 +124,11 @@ def main(args):
         args.num_layers,
         args.dropout,
         args.bidirectional,
-        datasets[TRAIN].num_classes,
+        datasets[TRAIN].num_classes + 3 * args.add_labels,
         seq_wise=False,
     )
-    model.apply(init_weights)
+    if args.apply_init:
+        model.apply(init_weights)
     # TODO: init optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     schedular = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
@@ -177,12 +187,16 @@ def parse_args() -> Namespace:
 
     # data
     parser.add_argument("--max_len", type=int, default=128)
+    parser.add_argument("--add_labels", action="store_true", default=False)
+    parser.add_argument("--ignore", action="store_true", default=False)
+    parser.add_argument("--replace", action="store_true", default=False)
 
     # model
     parser.add_argument("--hidden_size", type=int, default=512)
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)
+    parser.add_argument("--apply_init", action="store_true", default=False)
 
     # optimizer
     parser.add_argument("--lr", type=float, default=1e-4)

@@ -20,6 +20,7 @@ SPLITS = [TRAIN, DEV]
 
 
 def init_weights(self):
+    print("init weights")
     for m in self.modules():
         if type(m) in [torch.nn.GRU, torch.nn.LSTM, torch.nn.RNN]:
             for name, param in m.named_parameters():
@@ -116,7 +117,8 @@ def main(args):
         args.bidirectional,
         datasets[TRAIN].num_classes,
     )
-    model.apply(init_weights)
+    if args.apply_init:
+        model.apply(init_weights)
     # TODO: init optimizer
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     schedular = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
@@ -181,6 +183,7 @@ def parse_args() -> Namespace:
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--bidirectional", type=bool, default=True)
+    parser.add_argument("--apply_init", action="store_true", default=False)
 
     # optimizer
     parser.add_argument("--lr", type=float, default=1e-4)

@@ -4,7 +4,6 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Dict, Callable, List
 from collections import defaultdict
-import pandas as pd
 
 import torch
 from torch.utils.data import DataLoader
@@ -15,7 +14,11 @@ from utils import Vocab
 
 
 def predict(
-    model: torch.nn.Module, dataloader: DataLoader, device: torch.device, idx2label: Callable
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    idx2label: Callable,
+    replace: bool,
 ) -> List[Dict]:
 
     model.eval()
@@ -30,13 +33,14 @@ def predict(
                 [idx2label(idx) for idx in ids[1 : len(inputs["tokens"][i]) - 1]]
                 for i, ids in enumerate(outputs)
             ]
-            # result = [
-            #     [
-            #         label if i == 0 or label != labels[i - 1] else label.replace("B", "I")
-            #         for i, label in enumerate(labels)
-            #     ]
-            #     for labels in result
-            # ]
+            if replace:
+                result = [
+                    [
+                        label if i == 0 or label != labels[i - 1] else label.replace("B", "I")
+                        for i, label in enumerate(labels)
+                    ]
+                    for labels in result
+                ]
             prediction["tags"] += result
     return prediction
 
@@ -49,7 +53,9 @@ def main(args):
     tag2idx: Dict[str, int] = json.loads(tag_idx_path.read_text())
 
     data = json.loads(args.test_file.read_text())
-    dataset = SeqClsDataset(data, vocab, tag2idx, args.max_len, is_train=False)
+    dataset = SeqClsDataset(
+        data, vocab, tag2idx, args.max_len, is_train=False, add_labels=args.add_labels
+    )
     # TODO: crecate DataLoader for test dataset
     dataloader = DataLoader(
         dataset,
@@ -67,7 +73,7 @@ def main(args):
         args.num_layers,
         args.dropout,
         args.bidirectional,
-        dataset.num_classes,
+        dataset.num_classes + 3 * args.add_labels,
         seq_wise=False,
     )
     model.eval()
@@ -77,7 +83,7 @@ def main(args):
     model.load_state_dict(ckpt)
     model.to(args.device)
     # TODO: predict dataset
-    prediction = predict(model, dataloader, args.device, dataset.idx2label)
+    prediction = predict(model, dataloader, args.device, dataset.idx2label, args.replace)
     # TODO: write prediction to file (args.pred_file)
     # df = pd.DataFrame.from_dict(prediction)
     # df.to_csv(args.pred_file, index=False, doublequote=False)
@@ -101,6 +107,8 @@ def parse_args() -> Namespace:
 
     # data
     parser.add_argument("--max_len", type=int, default=128)
+    parser.add_argument("--add_labels", action="store_true", default=False)
+    parser.add_argument("--replace", action="store_true", default=False)
 
     # model
     parser.add_argument("--hidden_size", type=int, default=512)
