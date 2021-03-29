@@ -57,7 +57,7 @@ class SeqClassifier(torch.nn.Module):
             logits = self.fc(last_encoded)
             return logits
         else:
-            # encoded = self.batchnorm(encoded.permute(0, 2, 1)).permute(0, 2, 1)
+            encoded = self.batchnorm(encoded.permute(0, 2, 1)).permute(0, 2, 1)
             logits = self.fc(encoded)
             return logits
         raise NotImplementedError
