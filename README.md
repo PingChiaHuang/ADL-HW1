@@ -36,5 +36,5 @@ python train_slot.py
 
 ## Slot detection (my model)
 ```shell
-python train_slot.py --apply_init --add_label
+python train_slot.py --apply_init --add_labels
 ```
