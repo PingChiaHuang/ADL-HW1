@@ -1,0 +1,1 @@
+python3.8 test_slot.py --test_file "${1}" --ckpt_path best_model/slot/init_add_labels/025-0.0318-0.7820.pt --pred_file "${2}" --add_labels
