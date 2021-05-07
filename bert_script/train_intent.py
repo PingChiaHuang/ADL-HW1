@@ -1,0 +1,173 @@
+import json
+import pickle
+from argparse import ArgumentParser, Namespace
+from pathlib import Path
+from typing import Dict
+import numpy as np
+
+import torch
+from torch.utils.data import DataLoader
+from torch.optim import AdamW, Adam, lr_scheduler
+from torch.nn import CrossEntropyLoss
+
+from dataset import SeqClsDataset
+from bert_model import SeqClassifier
+
+TRAIN = "train"
+DEV = "eval"
+SPLITS = [TRAIN, DEV]
+
+def run_one_epoch(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    optimizer: torch.optim,
+    lr_scheduler: torch.optim.lr_scheduler,
+    mode: str,
+    total_len: int,
+    batch_size: int,
+) -> Dict:
+
+    is_train = mode == TRAIN
+    model.train() if is_train else model.eval()
+
+    num_batch = int(np.ceil(total_len / batch_size))
+    criterion = CrossEntropyLoss()
+    total_loss = 0
+    total_correct = 0
+    for i, inputs in enumerate(dataloader, 1):
+        with torch.set_grad_enabled(is_train):
+            outputs = model(inputs["text_ids"].to(device))
+            labels = inputs["intent_ids"].to(device)
+            optimizer.zero_grad()
+            loss = criterion(outputs, labels)
+
+            if is_train:
+                loss.backward()
+                optimizer.step()
+
+            loss = loss.item()
+            correct = (torch.argmax(outputs, dim=-1) == labels).float()
+            print(
+                f"{i:03d}/{num_batch} [{mode.center(5)}] Loss: {loss:.4f} ACC: {correct.mean().item():.4f}",
+                end="\r",
+            )
+
+            total_loss += loss * labels.size(0)
+            total_correct += correct.sum().item()
+
+    if not is_train:
+        lr_scheduler.step(total_loss)
+
+    result = {}
+    result["loss"] = total_loss / total_len
+    result["acc"] = total_correct / total_len
+    return result
+
+
+def main(args):
+    intent_idx_path = args.cache_dir / "intent2idx.json"
+    intent2idx: Dict[str, int] = json.loads(intent_idx_path.read_text())
+
+    data_paths = {split: args.data_dir / f"{split}.json" for split in SPLITS}
+    data = {split: json.loads(path.read_text()) for split, path in data_paths.items()}
+    datasets: Dict[str, SeqClsDataset] = {
+        split: SeqClsDataset(split_data, intent2idx, args.max_len)
+        for split, split_data in data.items()
+    }
+    # TODO: crecate DataLoader for train / dev datasets
+    dataloaders = {
+        split: DataLoader(
+            split_dataset,
+            batch_size=args.batch_size,
+            shuffle=(split == TRAIN),
+            num_workers=args.num_workers,
+            collate_fn=split_dataset.collate_fn_intent,
+        )
+        for split, split_dataset in datasets.items()
+    }
+    # TODO: init model and move model to target device(cpu / gpu)
+    model = SeqClassifier(
+        datasets[TRAIN].num_classes,
+    )
+    # TODO: init optimizer
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    schedular = lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
+    # epoch_pbar = trange(args.num_epoch, desc="Epoch")
+    model.to(args.device)
+    best_loss = np.inf
+    for epoch in range(1, args.num_epoch + 1):
+        # TODO: Training loop - iterate over train dataloader and update model weights
+        # TODO: Evaluation loop - calculate accuracy and save model weights
+        for split in [TRAIN, DEV]:
+            result = run_one_epoch(
+                model,
+                dataloaders[split],
+                device=args.device,
+                optimizer=optimizer,
+                lr_scheduler=schedular,
+                mode=split,
+                total_len=len(datasets[split]),
+                batch_size=args.batch_size,
+            )
+            print(
+                f"{epoch:03d}/{args.num_epoch} [{split.center(5)}] Loss: {result['loss']:.4f} Acc: {result['acc']:.4f}"
+            )
+
+            if split == DEV:
+                if best_loss > result["loss"]:
+                    best_loss = result["loss"]
+                    torch.save(
+                        model.state_dict(),
+                        args.ckpt_dir / f"{epoch:03d}-{result['loss']:.4f}-{result['acc']:.4f}.pt",
+                    )
+
+    # TODO: Inference on test set
+
+
+def parse_args() -> Namespace:
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--data_dir",
+        type=Path,
+        help="Directory to the dataset.",
+        default="./data/intent/",
+    )
+    parser.add_argument(
+        "--cache_dir",
+        type=Path,
+        help="Directory to the preprocessed caches.",
+        default="./bert_cache/intent/",
+    )
+    parser.add_argument(
+        "--ckpt_dir",
+        type=Path,
+        help="Directory to save the model file.",
+        default="./bert_ckpt/intent/default/",
+    )
+
+    # data
+    parser.add_argument("--max_len", type=int, default=512)
+
+    # optimizer
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-2)
+
+    # data loader
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--num_workers", type=int, default=8)
+
+    # training
+    parser.add_argument(
+        "--device", type=torch.device, help="cpu, cuda, cuda:0, cuda:1", default="cpu"
+    )
+    parser.add_argument("--num_epoch", type=int, default=100)
+
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    args.ckpt_dir.mkdir(parents=True, exist_ok=True)
+    main(args)
